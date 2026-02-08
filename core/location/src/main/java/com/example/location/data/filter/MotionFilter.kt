@@ -27,8 +27,7 @@ class MotionFilter(
 
         // 2) Speed gate (if available)
         val speed = next.speedMps
-        if (speed != null && speed < config.minSpeedMps) return false
-
+        if (speed != null && speed > 0f && speed < config.minSpeedMps) return false
         // 3) Distance gate
         val distance = haversineMeters(
             prev.latitude, prev.longitude,

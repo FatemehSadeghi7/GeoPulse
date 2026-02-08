@@ -1,10 +1,8 @@
 package com.example.geopulse.ui
 
-
 import android.app.Application
 import android.os.Build
 import androidx.annotation.RequiresApi
-
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.location.service.GeoLocationService
@@ -47,6 +45,13 @@ class MapViewModel @Inject constructor(
         bindJob?.cancel()
     }
 
+    /**
+     * پاک کردن مسیر (اختیاری — مثلاً وقتی کاربر tracking جدید شروع میکنه)
+     */
+    fun clearPath() {
+        _state.update { it.copy(pathPoints = emptyList()) }
+    }
+
     private fun bindAndCollect() {
         if (!_state.value.hasLocationPermission) return
 
@@ -57,7 +62,12 @@ class MapViewModel @Inject constructor(
                 if (service != null) {
                     collectJob = viewModelScope.launch {
                         service.movingLocations.collect { point ->
-                            _state.update { it.copy(lastPoint = point) }
+                            _state.update {
+                                it.copy(
+                                    lastPoint = point,
+                                    pathPoints = it.pathPoints + point  // ← اضافه کردن به مسیر
+                                )
+                            }
                         }
                     }
                 }

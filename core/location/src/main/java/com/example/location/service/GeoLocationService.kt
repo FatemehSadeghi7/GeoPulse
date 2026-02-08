@@ -30,11 +30,14 @@ class GeoLocationService : Service() {
         const val ACTION_START = "com.example.geovector.location.START"
         const val ACTION_STOP  = "com.example.geovector.location.STOP"
 
-        @RequiresApi(Build.VERSION_CODES.O)
         fun start(context: Context) {
-            val intent = Intent(context, GeoLocationService::class.java).apply { action = ACTION_START }
-            // برای API 26+ بهتره startForegroundService
-            context.startForegroundService(intent)
+            val intent = Intent(context, GeoLocationService::class.java)
+                .apply { action = ACTION_START }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
         }
 
         fun stop(context: Context) {
