@@ -12,6 +12,10 @@ appcompat = "1.6.1"
 material = "1.10.0"
 hilt = "2.52"
 ksp = "2.0.21-1.0.25"
+playServicesMaps = "20.0.0"
+mapsCompose = "4.4.1"
+hiltNavCompose = "1.2.0"
+
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -33,6 +37,9 @@ material = { group = "com.google.android.material", name = "material", version.r
 javax-inject = { module = "javax.inject:javax.inject", version = "1" }
 hilt-android = { module = "com.google.dagger:hilt-android", version.ref = "hilt" }
 hilt-compiler = { module = "com.google.dagger:hilt-compiler", version.ref = "hilt" }
+play-services-maps = { module = "com.google.android.gms:play-services-maps", version.ref = "playServicesMaps" }
+maps-compose = { module = "com.google.maps.android:maps-compose", version.ref = "mapsCompose" }
+hilt-navigation-compose = { module = "androidx.hilt:hilt-navigation-compose", version.ref = "hiltNavCompose" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

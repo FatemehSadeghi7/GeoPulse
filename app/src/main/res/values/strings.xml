@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">GeoPulse</string>
+    <string name="google_maps_key">AIzaSyAr4kMqKJwimM1p7gKgKoI86JmFdB0X2bg</string>
+
 </resources>
