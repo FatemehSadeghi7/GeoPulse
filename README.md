@@ -177,7 +177,7 @@ GeoPulse continuously monitors location access and responds instantly:
 
 **1.** Clone the repository:
 ```bash
-git clone https://github.com/your-username/GeoPulse.git
+git clone https://github.com/FatemehSadeghi7/GeoPulse
 cd GeoPulse
 ```
 
@@ -219,10 +219,10 @@ The app requires:
 
 ## 🔧 Build Variants
 
-| Variant | MinifyEnabled | ShrinkResources | Size |
-|---------|:------------:|:---------------:|:----:|
-| Debug | ❌ | ❌ | ~16 MB |
-| Release | ✅ | ✅ | ~8-10 MB |
+| Variant | MinifyEnabled | ShrinkResources |  Size   |
+|---------|:------------:|:---------------:|:-------:|
+| Debug | ❌ | ❌ | ~16 MB  |
+| Release | ✅ | ✅ | ~3-4 MB |
 
 ---
 
@@ -245,5 +245,5 @@ copies or substantial portions of the Software.
 ---
 
 <p align="center">
-  Made with ❤️
+  Made with fatemeh
 </p>
