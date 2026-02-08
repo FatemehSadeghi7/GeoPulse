@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.callbackFlow
 import javax.inject.Inject
 
 
+
 class GpsLocationDataSource @Inject constructor(
     @ApplicationContext private val context: Context
 ) : RawLocationDataSource {
@@ -34,14 +35,12 @@ class GpsLocationDataSource @Inject constructor(
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         }
 
-        // اگر GPS خام می‌خوایم: فقط GPS_PROVIDER
         val provider = LocationManager.GPS_PROVIDER
 
-        // پارامترها (خام):
-        // minTimeMs: حداقل فاصله زمانی بین آپدیت‌ها
-        // minDistanceM: حداقل جابجایی برای ارسال آپدیت از سمت سیستم
+        // ★ مهم: minDistanceM = 0 تا همه آپدیت‌ها بیان
+        // تصمیم‌گیری فیلتر فقط با MotionFilter انجام میشه
         val minTimeMs = 1000L
-        val minDistanceM = 5f
+        val minDistanceM = 0f   // قبلاً 5f بود
 
         locationManager.requestLocationUpdates(
             provider,

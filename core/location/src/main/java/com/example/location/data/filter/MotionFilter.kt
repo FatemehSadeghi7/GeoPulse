@@ -2,7 +2,6 @@ package com.example.location.data.filter
 
 import com.example.location.config.MotionConfig
 import com.example.location.domain.entity.GeoPoint
-
 import kotlin.math.*
 
 class MotionFilter(
@@ -15,25 +14,32 @@ class MotionFilter(
      * false if it should be suppressed (stationary/jitter/low quality).
      */
     fun shouldEmit(next: GeoPoint): Boolean {
-        // 1) Accuracy gate
+        // 1) Accuracy gate — GPS بی‌کیفیت رد بشه
         val acc = next.accuracyMeters
         if (acc != null && acc > config.maxAccuracyMeters) return false
 
         val prev = lastEmitted
         if (prev == null) {
             lastEmitted = next
-            return true // first fix
+            return true // اولین نقطه همیشه emit بشه
         }
 
-        // 2) Speed gate (if available)
-        val speed = next.speedMps
-        if (speed != null && speed > 0f && speed < config.minSpeedMps) return false
-        // 3) Distance gate
+        // 2) Distance gate — فاصله از آخرین نقطه emit شده
         val distance = haversineMeters(
             prev.latitude, prev.longitude,
             next.latitude, next.longitude
         )
+
+        // اگه فاصله خیلی کمه → حرکت واقعی نیست (jitter)
         if (distance < config.minDisplacementMeters) return false
+
+        // 3) Speed gate — فقط وقتی سرعت واقعاً گزارش شده و مثبته بررسی کن
+        //    اگه speed صفر گزارش بشه ولی distance کافی باشه → احتمالاً حرکت واقعیه
+        //    بعضی گوشی‌ها speed رو دیر آپدیت میکنن
+        val speed = next.speedMps
+        if (speed != null && speed > 0.01f && speed < config.minSpeedMps && distance < config.minDisplacementMeters * 2) {
+            return false
+        }
 
         lastEmitted = next
         return true
