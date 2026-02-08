@@ -21,4 +21,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "GeoPulse"
 include(":app")
- 
+include(":core:common")
+include(":core:location")
+
+project(":core:common").projectDir = file("core/common")
+project(":core:location").projectDir = file("core/location")
