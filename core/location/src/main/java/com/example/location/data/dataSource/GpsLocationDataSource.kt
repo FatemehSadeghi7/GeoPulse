@@ -26,6 +26,7 @@ class GpsLocationDataSource @Inject constructor(
             override fun onLocationChanged(location: Location) {
                 trySend(location.toGeoPoint())
             }
+
             override fun onProviderEnabled(provider: String) {}
             override fun onProviderDisabled(provider: String) {}
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -42,9 +43,7 @@ class GpsLocationDataSource @Inject constructor(
         }
     }
 
-    /**
-     * آخرین لوکیشن شناخته شده — فوری برمیگرده بدون انتظار GPS fix
-     */
+
     @SuppressLint("MissingPermission")
     override fun lastKnownLocation(): GeoPoint? {
         val loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)

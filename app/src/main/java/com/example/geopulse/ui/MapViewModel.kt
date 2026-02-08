@@ -26,6 +26,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+@RequiresApi(Build.VERSION_CODES.O)
 @HiltViewModel
 class MapViewModel @Inject constructor(
     private val app: Application
@@ -42,15 +43,17 @@ class MapViewModel @Inject constructor(
     private var collectJob: Job? = null
     private var monitorJob: Job? = null
 
+    private var userWantsTracking = false
+
     private val gpsReceiver = object : BroadcastReceiver() {
+        @RequiresApi(Build.VERSION_CODES.O)
         override fun onReceive(context: Context, intent: Intent) {
-            Log.d(TAG, "★ GPS broadcast received: ${intent.action}")
-            checkPermissionsAndGps()
+            Log.d(TAG, "★ GPS broadcast")
+            refreshState()
         }
     }
 
     init {
-        // ثبت receiver برای GPS on/off
         try {
             val filter = IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -58,101 +61,132 @@ class MapViewModel @Inject constructor(
             } else {
                 app.registerReceiver(gpsReceiver, filter)
             }
-            Log.d(TAG, "★ GPS receiver registered")
-        } catch (e: Exception) {
-            Log.e(TAG, "★ Failed to register GPS receiver", e)
+        } catch (_: Exception) {
         }
 
-        // شروع مانیتورینگ دائمی
         startMonitoring()
     }
 
     override fun onCleared() {
         super.onCleared()
-        try { app.unregisterReceiver(gpsReceiver) } catch (_: Exception) {}
+        try {
+            app.unregisterReceiver(gpsReceiver)
+        } catch (_: Exception) {
+        }
         monitorJob?.cancel()
     }
 
-    fun checkPermissionsAndGps() {
-        val fine = ContextCompat.checkSelfPermission(
-            app, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(
-            app, Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val hasPermission = fine || coarse
 
-        val locationManager = app.getSystemService(LocationManager::class.java)
-        val gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun refreshState() {
+        val hasPerm = hasPermission()
+        val gpsOn = isGpsOn()
 
-        val prev = _state.value
-        val changed = prev.hasLocationPermission != hasPermission || prev.isGpsEnabled != gpsEnabled
+        _state.update { it.copy(hasLocationPermission = hasPerm, isGpsEnabled = gpsOn) }
 
-        if (changed) {
-            Log.d(TAG, "★ Status changed: permission=$hasPermission gps=$gpsEnabled")
-        }
-
-        _state.update {
-            it.copy(
-                hasLocationPermission = hasPermission,
-                isGpsEnabled = gpsEnabled
-            )
-        }
-
-        // پرمیشن یا GPS نداره و سرویس فعاله → stop
-        if ((!hasPermission || !gpsEnabled) && _state.value.isServiceRunning) {
-            Log.d(TAG, "★ Stopping service: permission=$hasPermission gps=$gpsEnabled")
-            stopService()
+        if (userWantsTracking) {
+            if (hasPerm && gpsOn) {
+                if (!_state.value.isServiceRunning) {
+                    resumeService()
+                }
+            } else {
+                if (_state.value.isServiceRunning) {
+                    pauseService()
+                }
+            }
         }
     }
 
-    fun onPermissionResult(granted: Boolean) {
-        _state.update { it.copy(hasLocationPermission = granted) }
-        if (granted) {
-            checkPermissionsAndGps()
-            bindAndCollect()
-        }
+
+    private fun hasPermission(): Boolean {
+        val fine = ContextCompat.checkSelfPermission(
+            app,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val coarse = ContextCompat.checkSelfPermission(
+            app,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        return fine || coarse
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    fun startService() {
-        checkPermissionsAndGps()
-        if (!_state.value.hasLocationPermission || !_state.value.isGpsEnabled) return
-
-        GeoLocationService.start(app)
-        _state.update { it.copy(isServiceRunning = true) }
-        bindAndCollect()
+    fun onPermissionResult(granted: Boolean) {
+        _state.update { it.copy(hasLocationPermission = granted) }
+        if (granted) {
+            bindAndCollect()
+            refreshState()
+        }
     }
 
-    fun stopService() {
+
+    private fun isGpsOn(): Boolean {
+        val lm = app.getSystemService(LocationManager::class.java)
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            lm.isLocationEnabled
+        } else {
+            lm.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+        }
+    }
+
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    fun startTracking() {
+        if (!_state.value.hasLocationPermission) return
+
+        userWantsTracking = true
+
+        if (isGpsOn()) {
+            GeoLocationService.start(app)
+            _state.update { it.copy(isServiceRunning = true, isGpsEnabled = true) }
+            bindAndCollect()
+            startMonitoring()
+        } else {
+            _state.update { it.copy(isGpsEnabled = false) }
+        }
+    }
+
+    fun stopTracking() {
+        userWantsTracking = false
+        GeoLocationService.stop(app)
+        _state.update { it.copy(isServiceRunning = false) }
+        collectJob?.cancel()
+        bindJob?.cancel()
+        monitorJob?.cancel()
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun pauseService() {
+        Log.d(TAG, "★ Pause: GPS off")
         GeoLocationService.stop(app)
         _state.update { it.copy(isServiceRunning = false) }
         collectJob?.cancel()
         bindJob?.cancel()
     }
 
-    fun clearPath() {
-        _state.update { it.copy(pathPoints = emptyList()) }
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun resumeService() {
+        Log.d(TAG, "★ Resume: GPS on")
+        GeoLocationService.start(app)
+        _state.update { it.copy(isServiceRunning = true) }
+        bindAndCollect()
     }
 
-    /**
-     * همیشه هر ۱ ثانیه چک میکنه — چون:
-     * - پرمیشن لوکیشن broadcast نداره
-     * - بعضی گوشی‌ها GPS broadcast رو درست نمیفرستن
-     */
+
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun startMonitoring() {
         monitorJob?.cancel()
         monitorJob = viewModelScope.launch {
             while (isActive) {
                 delay(1000)
-                checkPermissionsAndGps()
+                refreshState()
             }
         }
     }
 
     private fun bindAndCollect() {
         if (!_state.value.hasLocationPermission) return
-
         bindJob?.cancel()
         bindJob = viewModelScope.launch {
             GeoLocationServiceConnector.bind(app).collect { service ->

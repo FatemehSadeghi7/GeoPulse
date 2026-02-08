@@ -18,17 +18,10 @@ class MovementDetector(
     companion object {
         private const val TAG = "MovementDetector"
 
-        // آستانه شتاب — فقط حرکت واقعی (راه رفتن/رانندگی)
-        // 0.12 = خیلی حساس (لرزش دست هم میگیره)
-        // 0.3  = متوسط (راه رفتن آرام)
-        // 0.5  = فقط حرکت قوی
         private const val MOVE_THRESHOLD = 0.35f
 
-        // چند نمونه متوالی باید حرکت ببینه تا Moving بشه
-        // بالاتر = کمتر false positive
         private const val MOVE_COUNT_TRIGGER = 5
 
-        // چند ثانیه بدون حرکت → Stationary
         private const val STILL_TIMEOUT_MS = 4000L
     }
 
@@ -63,12 +56,10 @@ class MovementDetector(
                     return
                 }
 
-                // جدا کردن گرانش
                 gravX = alpha * gravX + (1 - alpha) * event.values[0]
                 gravY = alpha * gravY + (1 - alpha) * event.values[1]
                 gravZ = alpha * gravZ + (1 - alpha) * event.values[2]
 
-                // شتاب خالص
                 val lx = event.values[0] - gravX
                 val ly = event.values[1] - gravY
                 val lz = event.values[2] - gravZ

@@ -10,8 +10,8 @@ import androidx.core.app.NotificationCompat
 
 internal object GeoLocationNotification {
 
-    const val CHANNEL_ID = "geovector_location_channel"
-    const val CHANNEL_NAME = "Location Tracking"
+    private const val CHANNEL_ID = "geovector_location_channel"
+    private const val CHANNEL_NAME = "Location Tracking"
     const val NOTIFICATION_ID = 1001
 
     fun ensureChannel(context: Context) {
@@ -30,8 +30,7 @@ internal object GeoLocationNotification {
     }
 
     fun build(context: Context): Notification {
-        // اگر آیکن نداشتی، یک آیکن ساده در app یا location module اضافه کن.
-        // فعلاً از آیکن پیشفرض سیستم هم میشه استفاده کرد، ولی بهتره آیکن خودت باشه.
+
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("GeoVector")
             .setContentText("Tracking location while moving…")

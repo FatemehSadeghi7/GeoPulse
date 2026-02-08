@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
     implementation(libs.hilt.android)
+    implementation(libs.play.services.location)
     ksp(libs.hilt.compiler)
     implementation(libs.play.services.maps)
     implementation(libs.maps.compose)

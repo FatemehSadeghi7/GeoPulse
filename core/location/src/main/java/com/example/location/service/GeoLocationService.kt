@@ -7,7 +7,6 @@ import android.content.Intent
 import android.os.Binder
 import android.os.Build
 import android.os.IBinder
-import androidx.annotation.RequiresApi
 import com.example.location.api.LocationClient
 import com.example.location.domain.entity.GeoPoint
 
@@ -27,8 +26,8 @@ import javax.inject.Inject
 class GeoLocationService : Service() {
 
     companion object {
-        const val ACTION_START = "com.example.geovector.location.START"
-        const val ACTION_STOP  = "com.example.geovector.location.STOP"
+        const val ACTION_START = "com.example.geopulse.location.START"
+        const val ACTION_STOP = "com.example.geovepulse.location.STOP"
 
         fun start(context: Context) {
             val intent = Intent(context, GeoLocationService::class.java)
@@ -41,29 +40,33 @@ class GeoLocationService : Service() {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, GeoLocationService::class.java).apply { action = ACTION_STOP }
+            val intent =
+                Intent(context, GeoLocationService::class.java).apply { action = ACTION_STOP }
             context.startService(intent)
         }
     }
 
-    @Inject lateinit var locationClient: LocationClient
+    @Inject
+    lateinit var locationClient: LocationClient
 
     private val serviceJob = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.Main.immediate + serviceJob)
 
     private val binder = LocalBinder()
 
-    // خروجی برای اپ (SharedFlow)
     private val _movingLocations = MutableSharedFlow<GeoPoint>(
         replay = 1,
         extraBufferCapacity = 8
     )
     val movingLocations: Flow<GeoPoint> = _movingLocations
 
-    // اگر خواستی stream را share کنی (اختیاری):
     private val sharedFromClient by lazy {
         locationClient.movingLocations()
-            .shareIn(scope, started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000), replay = 1)
+            .shareIn(
+                scope,
+                started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),
+                replay = 1
+            )
     }
 
     override fun onCreate() {
@@ -74,8 +77,9 @@ class GeoLocationService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> startTracking()
-            ACTION_STOP  -> stopTracking()
-            else -> { /* ignore */ }
+            ACTION_STOP -> stopTracking()
+            else -> { /* ignore */
+            }
         }
         return START_STICKY
     }
@@ -86,13 +90,11 @@ class GeoLocationService : Service() {
         if (isTracking) return
         isTracking = true
 
-        // Foreground
         startForeground(
             GeoLocationNotification.NOTIFICATION_ID,
             GeoLocationNotification.build(this)
         )
 
-        // Collect moving locations (این خروجی قبلاً MotionFilter را رعایت می‌کند)
         scope.launch {
             sharedFromClient.collect { point ->
                 _movingLocations.emit(point)

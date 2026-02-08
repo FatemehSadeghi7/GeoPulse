@@ -21,7 +21,6 @@ class LocationRepositoryImpl @Inject constructor(
 
         val isMoving = MutableStateFlow(false)
 
-        // شتاب‌سنج → تنها معیار حرکت
         launch {
             movementDetector.observeMovement().collect { moving ->
                 Log.d("GeoRepo", "★ accelerometer: $moving")
@@ -29,7 +28,6 @@ class LocationRepositoryImpl @Inject constructor(
             }
         }
 
-        // GPS → وقتی شتاب‌سنج میگه حرکت، مستقیم بفرست
         dataSource.locations().collect { point ->
             if (isMoving.value) {
                 Log.d("GeoRepo", "★ EMIT: ${point.latitude},${point.longitude}")
