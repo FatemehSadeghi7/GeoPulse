@@ -9,37 +9,35 @@ class MotionFilter(
 ) {
     private var lastEmitted: GeoPoint? = null
 
-    /**
-     * Returns true if this point should be emitted (moving),
-     * false if it should be suppressed (stationary/jitter/low quality).
-     */
+    fun reset() {
+        lastEmitted = null
+    }
+
     fun shouldEmit(next: GeoPoint): Boolean {
-        // 1) Accuracy gate — GPS بی‌کیفیت رد بشه
         val acc = next.accuracyMeters
         if (acc != null && acc > config.maxAccuracyMeters) return false
 
         val prev = lastEmitted
         if (prev == null) {
             lastEmitted = next
-            return true // اولین نقطه همیشه emit بشه
+            return true
         }
 
-        // 2) Distance gate — فاصله از آخرین نقطه emit شده
         val distance = haversineMeters(
             prev.latitude, prev.longitude,
             next.latitude, next.longitude
         )
 
-        // اگه فاصله خیلی کمه → حرکت واقعی نیست (jitter)
-        if (distance < config.minDisplacementMeters) return false
+        // حداقل جابجایی = بزرگترین مقدار بین:
+        //   - config.minDisplacementMeters (5 متر)
+        //   - accuracy فعلی GPS (مثلاً 40 متر)
+        // اگه GPS دقت 40 متری داره، جابجایی کمتر از 40 متر قابل اتکا نیست
+        val minDisplacement = maxOf(
+            config.minDisplacementMeters,
+            acc ?: config.minDisplacementMeters
+        )
 
-        // 3) Speed gate — فقط وقتی سرعت واقعاً گزارش شده و مثبته بررسی کن
-        //    اگه speed صفر گزارش بشه ولی distance کافی باشه → احتمالاً حرکت واقعیه
-        //    بعضی گوشی‌ها speed رو دیر آپدیت میکنن
-        val speed = next.speedMps
-        if (speed != null && speed > 0.01f && speed < config.minSpeedMps && distance < config.minDisplacementMeters * 2) {
-            return false
-        }
+        if (distance < minDisplacement) return false
 
         lastEmitted = next
         return true

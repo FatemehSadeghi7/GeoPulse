@@ -1,24 +1,40 @@
 package com.example.location.data.repository
 
-import com.example.location.config.MotionConfig
+import android.util.Log
 import com.example.location.data.dataSource.RawLocationDataSource
-import com.example.location.data.filter.MotionFilter
+import com.example.location.data.sensor.MovementDetector
 import com.example.location.domain.entity.GeoPoint
 import com.example.location.domain.repository.LocationRepository
-
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.channelFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 class LocationRepositoryImpl @Inject constructor(
     private val dataSource: RawLocationDataSource,
-    motionConfig: MotionConfig
+    private val movementDetector: MovementDetector
 ) : LocationRepository {
 
-    private val filter = MotionFilter(motionConfig)
+    override fun observeMovingLocations(): Flow<GeoPoint> = channelFlow {
+        Log.d("GeoRepo", "★ started")
 
-    override fun observeMovingLocations(): Flow<GeoPoint> {
-        return dataSource.locations()
-            .filter { filter.shouldEmit(it) }
+        val isMoving = MutableStateFlow(false)
+
+        // شتاب‌سنج → تنها معیار حرکت
+        launch {
+            movementDetector.observeMovement().collect { moving ->
+                Log.d("GeoRepo", "★ accelerometer: $moving")
+                isMoving.value = moving
+            }
+        }
+
+        // GPS → وقتی شتاب‌سنج میگه حرکت، مستقیم بفرست
+        dataSource.locations().collect { point ->
+            if (isMoving.value) {
+                Log.d("GeoRepo", "★ EMIT: ${point.latitude},${point.longitude}")
+                send(point)
+            }
+        }
     }
 }

@@ -1,8 +1,10 @@
 package com.example.geopulse.ui
 
 import android.Manifest
-import android.content.pm.PackageManager
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
@@ -44,7 +46,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -61,8 +62,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -77,11 +80,9 @@ private val Blue = Color(0xFF1976D2)
 private val LightBlue = Color(0x441976D2)
 private val Green = Color(0xFF43A047)
 private val Red = Color(0xFFE53935)
-private val Amber = Color(0xFF5C6BC0) // ایندیگو ملایم به جای نارنجی
+private val Amber = Color(0xFF5C6BC0)
 private val TextPrimary = Color(0xFF212121)
 private val TextSecondary = Color(0xFF757575)
-private val TextHint = Color(0xFFBDBDBD)
-private val DividerColor = Color(0xFFEEEEEE)
 
 @RequiresApi(Build.VERSION_CODES.O)
 @Composable
@@ -97,14 +98,12 @@ fun MapScreen(vm: MapViewModel = hiltViewModel()) {
         vm.onPermissionResult(granted)
     }
 
-    LaunchedEffect(Unit) {
-        val fine = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        val coarse = ContextCompat.checkSelfPermission(
-            context, Manifest.permission.ACCESS_COARSE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
-        vm.onPermissionResult(fine || coarse)
+    // هر بار که اپ RESUMED میشه → چک پرمیشن + GPS
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            vm.checkPermissionsAndGps()
+        }
     }
 
     val last = state.lastPoint
@@ -151,12 +150,10 @@ fun MapScreen(vm: MapViewModel = hiltViewModel()) {
                 mapToolbarEnabled = false
             )
         ) {
-            // خط مسیر
             if (pathLatLngs.size >= 2) {
                 Polyline(points = pathLatLngs, color = Color(0x30000000), width = 12f)
                 Polyline(points = pathLatLngs, color = Blue, width = 7f)
             }
-            // نقطه موقعیت
             if (lastLatLng != null) {
                 if (state.isServiceRunning) {
                     Circle(
@@ -183,6 +180,110 @@ fun MapScreen(vm: MapViewModel = hiltViewModel()) {
             }
         }
 
+        // ══════ هشدار بدون پرمیشن یا بدون GPS ══════
+        if (!state.hasLocationPermission || !state.isGpsEnabled) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(32.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Filled.LocationOn,
+                        contentDescription = null,
+                        tint = Red,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
+
+                    Text(
+                        text = if (!state.hasLocationPermission)
+                            "Location Permission Required"
+                        else
+                            "GPS is Turned Off",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(8.dp))
+
+                    Text(
+                        text = if (!state.hasLocationPermission)
+                            "This app needs location access to track your movement. Please grant location permission."
+                        else
+                            "Please enable GPS in your device settings to start tracking.",
+                        fontSize = 13.sp,
+                        color = TextSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            if (!state.hasLocationPermission) {
+                                // اول سعی کن از اپ بخواه
+                                permissionLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.ACCESS_FINE_LOCATION,
+                                        Manifest.permission.ACCESS_COARSE_LOCATION
+                                    )
+                                )
+                            } else {
+                                // GPS خاموشه → ببر به Settings
+                                context.startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Blue)
+                    ) {
+                        Text(
+                            text = if (!state.hasLocationPermission)
+                                "Grant Permission"
+                            else
+                                "Open GPS Settings",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    // دکمه باز کردن تنظیمات اپ (اگه پرمیشن deny شده)
+                    if (!state.hasLocationPermission) {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = "Open App Settings",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // ══════ نوار اطلاعات بالا ══════
         AnimatedVisibility(
             visible = state.isServiceRunning && last != null,
@@ -193,9 +294,6 @@ fun MapScreen(vm: MapViewModel = hiltViewModel()) {
                 .windowInsetsPadding(WindowInsets.statusBars)
         ) {
             if (last != null) {
-                val speedKmh = (last.speedMps ?: 0f) * 3.6f
-                val accuracy = last.accuracyMeters
-
                 Card(
                     modifier = Modifier
                         .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -204,191 +302,110 @@ fun MapScreen(vm: MapViewModel = hiltViewModel()) {
                     colors = CardDefaults.cardColors(containerColor = Color.White),
                     elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
                 ) {
-                    // ردیف اول: مختصات کامل
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(
-                            Icons.Filled.LocationOn,
-                            contentDescription = null,
-                            tint = Blue,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Filled.LocationOn,
+                                contentDescription = null,
+                                tint = Blue,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "%.5f, %.5f".format(last.latitude, last.longitude),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = TextPrimary
+                            )
+                        }
                         Text(
-                            text = "%.5f, %.5f".format(last.latitude, last.longitude),
+                            text = "${state.pathPoints.size} pts",
                             fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TextPrimary
-                        )
-                    }
-
-                    HorizontalDivider(
-                        color = DividerColor,
-                        modifier = Modifier.padding(horizontal = 16.dp)
-                    )
-
-                    // ردیف دوم: سرعت، دقت، نقاط
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 12.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        InfoItem(
-                            title = "Speed",
-                            value = "%.1f km/h".format(speedKmh),
-                            valueColor = if (speedKmh > 0) Green else TextSecondary
-                        )
-                        InfoItem(
-                            title = "Accuracy",
-                            value = if (accuracy != null) "%.0f m".format(accuracy) else "—",
-                            valueColor = when {
-                                accuracy == null -> TextHint
-                                accuracy <= 10f -> Green
-                                accuracy <= 25f -> Amber
-                                else -> Red
-                            }
-                        )
-                        InfoItem(
-                            title = "Points",
-                            value = "${state.pathPoints.size}",
-                            valueColor = Blue
+                            fontWeight = FontWeight.Bold,
+                            color = Blue
                         )
                     }
                 }
             }
         }
 
-        // ══════ پنل کنترل پایین ══════
-        Card(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .windowInsetsPadding(WindowInsets.navigationBars)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
-                .fillMaxWidth()
-                .animateContentSize(tween(300)),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
-            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+        // ══════ پنل کنترل پایین (فقط وقتی پرمیشن و GPS هست) ══════
+        if (state.hasLocationPermission && state.isGpsEnabled) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .fillMaxWidth()
+                    .animateContentSize(tween(300)),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
-                // نشانگر وضعیت
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 16.dp)
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // نقطه وضعیت (با پالس وقتی فعاله)
-                    if (state.isServiceRunning) {
-                        val statusPulse by inf.animateFloat(
-                            0.4f, 1f,
-                            infiniteRepeatable(tween(800), RepeatMode.Reverse),
-                            label = "sp"
-                        )
-                        Box(
-                            Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(Green.copy(alpha = statusPulse))
-                        )
-                    } else {
-                        Box(
-                            Modifier
-                                .size(10.dp)
-                                .background(Color.LightGray, CircleShape)
-                        )
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = when {
-                            !state.hasLocationPermission -> "Location Permission Required"
-                            state.isServiceRunning -> "Tracking Active"
-                            else -> "Ready to Track"
-                        },
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = when {
-                            !state.hasLocationPermission -> Amber
-                            state.isServiceRunning -> Green
-                            else -> TextSecondary
-                        }
-                    )
-                }
-
-                // دکمه‌ها
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            if (!state.hasLocationPermission) {
-                                permissionLauncher.launch(
-                                    arrayOf(
-                                        Manifest.permission.ACCESS_FINE_LOCATION,
-                                        Manifest.permission.ACCESS_COARSE_LOCATION
-                                    )
-                                )
-                            } else {
-                                vm.startService()
-                            }
-                        },
-                        enabled = !state.isServiceRunning,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(52.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (!state.hasLocationPermission) Amber else Blue,
-                            contentColor = Color.White,
-                            disabledContainerColor = Green.copy(alpha = 0.5f),
-                            disabledContentColor = Color.White.copy(alpha = 0.7f)
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(
-                            defaultElevation = 2.dp,
-                            pressedElevation = 6.dp
-                        )
+                    // نشانگر وضعیت
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(bottom = 16.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                if (!state.hasLocationPermission)
-                                    Icons.Filled.LocationOn else Icons.Filled.PlayArrow,
-                                contentDescription = null,
-                                modifier = Modifier.size(20.dp)
+                        if (state.isServiceRunning) {
+                            val statusPulse by inf.animateFloat(
+                                0.4f, 1f,
+                                infiniteRepeatable(tween(800), RepeatMode.Reverse),
+                                label = "sp"
                             )
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = when {
-                                    !state.hasLocationPermission -> "Allow Location"
-                                    state.isServiceRunning -> "Running…"
-                                    else -> "Start Tracking"
-                                },
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
+                            Box(
+                                Modifier
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(Green.copy(alpha = statusPulse))
+                            )
+                        } else {
+                            Box(
+                                Modifier
+                                    .size(10.dp)
+                                    .background(Color.LightGray, CircleShape)
                             )
                         }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = if (state.isServiceRunning) "Tracking Active" else "Ready to Track",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (state.isServiceRunning) Green else TextSecondary
+                        )
                     }
 
-                    // Stop — فقط وقتی سرویس فعاله
-                    if (state.isServiceRunning) {
-                        OutlinedButton(
-                            onClick = { vm.stopService() },
+                    // دکمه‌ها
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { vm.startService() },
+                            enabled = !state.isServiceRunning,
                             modifier = Modifier
                                 .weight(1f)
                                 .height(52.dp),
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Red
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Blue,
+                                contentColor = Color.White,
+                                disabledContainerColor = Green.copy(alpha = 0.5f),
+                                disabledContentColor = Color.White.copy(alpha = 0.7f)
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(
+                                defaultElevation = 2.dp,
+                                pressedElevation = 6.dp
                             )
                         ) {
                             Row(
@@ -396,46 +413,49 @@ fun MapScreen(vm: MapViewModel = hiltViewModel()) {
                                 horizontalArrangement = Arrangement.Center
                             ) {
                                 Icon(
-                                    Icons.Filled.Close,
+                                    Icons.Filled.PlayArrow,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp)
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
-                                    text = "Stop",
+                                    text = if (state.isServiceRunning) "Running…" else "Start Tracking",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp
                                 )
+                            }
+                        }
+
+                        if (state.isServiceRunning) {
+                            OutlinedButton(
+                                onClick = { vm.stopService() },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Red)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "Stop",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun InfoItem(
-    title: String,
-    value: String,
-    valueColor: Color = TextPrimary
-) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = title,
-            fontSize = 10.sp,
-            color = TextHint,
-            fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.Center
-        )
-        Spacer(Modifier.height(3.dp))
-        Text(
-            text = value,
-            fontSize = 14.sp,
-            color = valueColor,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center
-        )
     }
 }

@@ -40,5 +40,12 @@ object LocationProvides {
     @Provides
     @Singleton
     fun provideMotionConfig(): MotionConfig = MotionConfig()
+    @Provides
+    @Singleton
+    fun provideMovementDetector(
+        @dagger.hilt.android.qualifiers.ApplicationContext context: android.content.Context
+    ): com.example.location.data.sensor.MovementDetector {
+        return com.example.location.data.sensor.MovementDetector(context)
+    }
 }
 
